@@ -18,25 +18,37 @@
 
 package net.bluemix.sphero;
 
-import android.support.v7.app.ActionBarActivity;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.v7.app.ActionBarActivity;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import orbotix.robot.base.Robot;
-import orbotix.robot.base.RobotProvider;
-import orbotix.sphero.ConnectionListener;
-import orbotix.sphero.Sphero;
-import orbotix.view.connection.SpheroConnectionView;
+
+import com.orbotix.ConvenienceRobot;
+import com.orbotix.DualStackDiscoveryAgent;
+import com.orbotix.common.DiscoveryException;
+import com.orbotix.common.Robot;
+import com.orbotix.common.RobotChangedStateListener;
+
+import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
 import org.eclipse.paho.client.mqttv3.MqttConnectOptions;
 import org.eclipse.paho.client.mqttv3.MqttException;
 import org.eclipse.paho.client.mqttv3.MqttMessage;
 import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence;
-import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 
-public class MainActivity extends ActionBarActivity implements MqttCallback {
+import java.util.ArrayList;
+import java.util.List;
+
+public class MainActivity extends ActionBarActivity implements MqttCallback, RobotChangedStateListener {
+
+    private static final int REQUEST_CODE_LOCATION_PERMISSION = 42;
 
     MqttClient mqttClient;
 
@@ -46,14 +58,14 @@ public class MainActivity extends ActionBarActivity implements MqttCallback {
         // with the IBM Internet of Things Foundation (IoT service dashboard in Bluemix)
 
         // broker: replace "irnwk2" with your org
-        String broker       = "tcp://irnwk2.messaging.internetofthings.ibmcloud.com:1883";
+        String broker       = "tcp://nayvxj.messaging.internetofthings.ibmcloud.com:1883";
 
         // clientId: replace "irnwk2" with your org, "and" with your type (if you use another one)
         // and "niklas" with your own device id
-        String clientId     = "d:irnwk2:and:niklas";
+        String clientId     = "d:nayvxj:and:nexus";
 
         // password: replace with your own password
-        String password     = "";
+        String password     = "?A2!xNGyckzJfS6Hjp";
 
         MemoryPersistence persistence = new MemoryPersistence();
         try {
@@ -96,7 +108,7 @@ public class MainActivity extends ActionBarActivity implements MqttCallback {
             mRobot.drive(heading, speed);
         }
 
-        // change the color of the Sphero ball (command type: "setColor")
+        // change the color of the Sphero ball
         // expected JSON format of msg.payload:
         //  {"d":{
         //      "color":"red" }
@@ -105,23 +117,22 @@ public class MainActivity extends ActionBarActivity implements MqttCallback {
             payload = payload.replace(" ","");
             String colorS = payload.substring(payload.indexOf("color") + 8,
                     payload.indexOf("}")-1);
-            if (colorS == null) return;
             if (colorS.equalsIgnoreCase("")) return;
 
             if (colorS.equalsIgnoreCase("red")) {
-                mRobot.setColor(220, 20, 60);
+                mRobot.setLed(220, 20, 60);
             }
             if (colorS.equalsIgnoreCase("green")) {
-                mRobot.setColor(46,139,87);
+                mRobot.setLed(46,139,87);
             }
             if (colorS.equalsIgnoreCase("blue")) {
-                mRobot.setColor(70,130,180);
+                mRobot.setLed(70,130,180);
             }
             if (colorS.equalsIgnoreCase("yellow")) {
-                mRobot.setColor(255,255,0);
+                mRobot.setLed(255,255,0);
             }
             if (colorS.equalsIgnoreCase("black")) {
-                mRobot.setColor(10,20,1);
+                mRobot.setLed(10,20,1);
             }
         }
     }
@@ -143,42 +154,67 @@ public class MainActivity extends ActionBarActivity implements MqttCallback {
         }
     }
 
-    private Sphero mRobot;
-    private SpheroConnectionView mSpheroConnectionView;
+    private ConvenienceRobot mRobot;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        mSpheroConnectionView = (SpheroConnectionView) findViewById(R.id.sphero_connection_view);
-        mSpheroConnectionView.addConnectionListener(new ConnectionListener() {
+        DualStackDiscoveryAgent.getInstance().addRobotStateListener(this);
 
-            @Override
-            public void onConnected(Robot robot) {
-                mRobot = (Sphero) robot;
+        if( Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ) {
+            int hasLocationPermission = checkSelfPermission( Manifest.permission.ACCESS_COARSE_LOCATION );
+            if( hasLocationPermission != PackageManager.PERMISSION_GRANTED ) {
+                Log.e( "Sphero", "Location permission has not already been granted" );
+                List<String> permissions = new ArrayList<String>();
+                permissions.add( Manifest.permission.ACCESS_COARSE_LOCATION);
+                requestPermissions(permissions.toArray(new String[permissions.size()] ), REQUEST_CODE_LOCATION_PERMISSION );
+            } else {
+                Log.d( "Sphero", "Location permission already granted" );
             }
-
-            @Override
-            public void onConnectionFailed(Robot sphero) {
-            }
-
-            @Override
-            public void onDisconnected(Robot sphero) {
-                mSpheroConnectionView.startDiscovery();
-            }
-        });
+        }
     }
 
     @Override
-    protected void onResume() {
-        super.onResume();
-        mSpheroConnectionView.startDiscovery();
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        switch ( requestCode ) {
+            case REQUEST_CODE_LOCATION_PERMISSION: {
+                for( int i = 0; i < permissions.length; i++ ) {
+                    if( grantResults[i] == PackageManager.PERMISSION_GRANTED ) {
+                        startDiscovery();
+                        Log.d( "Permissions", "Permission Granted: " + permissions[i] );
+                    } else if( grantResults[i] == PackageManager.PERMISSION_DENIED ) {
+                        Log.d( "Permissions", "Permission Denied: " + permissions[i] );
+                    }
+                }
+            }
+            break;
+            default: {
+                super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+            }
+        }
     }
 
-    protected void onPause() {
-        super.onPause();
-        RobotProvider.getDefaultProvider().disconnectControlledRobots();
+    @Override
+    protected void onStart() {
+        super.onStart();
+
+        if( Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || checkSelfPermission( Manifest.permission.ACCESS_COARSE_LOCATION ) == PackageManager.PERMISSION_GRANTED ) {
+            startDiscovery();
+        }
+    }
+
+    private void startDiscovery() {
+        //If the DiscoveryAgent is not already looking for robots, start discovery.
+        if( !DualStackDiscoveryAgent.getInstance().isDiscovering() ) {
+            try {
+                DualStackDiscoveryAgent.getInstance().startDiscovery( this );
+            } catch (DiscoveryException e) {
+                Log.e("Sphero", "DiscoveryException: " + e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -194,5 +230,37 @@ public class MainActivity extends ActionBarActivity implements MqttCallback {
             return true;
         }
         return super.onOptionsItemSelected(item);
+    }
+
+    @Override
+    protected void onStop() {
+        //If the DiscoveryAgent is in discovery mode, stop it.
+        if( DualStackDiscoveryAgent.getInstance().isDiscovering() ) {
+            DualStackDiscoveryAgent.getInstance().stopDiscovery();
+        }
+
+        //If a robot is connected to the device, disconnect it
+        if( mRobot != null ) {
+            mRobot.disconnect();
+            mRobot = null;
+        }
+
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        DualStackDiscoveryAgent.getInstance().addRobotStateListener( null );
+    }
+
+    @Override
+    public void handleRobotChangedState(Robot robot, RobotChangedStateNotificationType type) {
+        switch (type) {
+            case Online: {
+                mRobot = new ConvenienceRobot(robot);
+                break;
+            }
+        }
     }
 }
