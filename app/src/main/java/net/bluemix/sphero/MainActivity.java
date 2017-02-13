@@ -19,6 +19,7 @@
 package net.bluemix.sphero;
 
 import android.Manifest;
+import android.annotation.TargetApi;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
@@ -52,6 +53,7 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
 
     MqttClient mqttClient;
 
+    @TargetApi(Build.VERSION_CODES.M)
     public void onConnectClick(View v) {
 
         // replace these values with the values you receive when registering new devices
@@ -65,8 +67,9 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
         String clientId     = "d:nayvxj:and:nexus";
 
         // password: replace with your own password
-        String password     = "?A2!xNGyckzJfS6Hjp";
+        String password     = "zkQhY1NUe*d9&b6)5C";
 
+        // Connect to IBM Bluemix
         MemoryPersistence persistence = new MemoryPersistence();
         try {
             mqttClient = new MqttClient(broker, clientId, persistence);
@@ -80,6 +83,12 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
             System.out.println("Connected");
         } catch(MqttException me) {
             me.printStackTrace();
+        }
+
+        // Connect to Sphero
+        if( Build.VERSION.SDK_INT < Build.VERSION_CODES.M
+                || checkSelfPermission( Manifest.permission.ACCESS_COARSE_LOCATION ) == PackageManager.PERMISSION_GRANTED ) {
+            startDiscovery();
         }
     }
 
@@ -145,12 +154,25 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
     }
 
     public void onDisconnectClick(View v) {
+        // Disconnect from IBM Bluemix
         try {
             mqttClient.disconnect();
             System.out.println("Disconnected");
         }
         catch(MqttException me) {
             me.printStackTrace();
+        }
+
+        // Disconnect from Sphero
+        //If the DiscoveryAgent is in discovery mode, stop it.
+        if( DualStackDiscoveryAgent.getInstance().isDiscovering() ) {
+            DualStackDiscoveryAgent.getInstance().stopDiscovery();
+        }
+
+        //If a robot is connected to the device, disconnect it
+        if( mRobot != null ) {
+            mRobot.disconnect();
+            mRobot = null;
         }
     }
 
@@ -196,16 +218,6 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
         }
     }
 
-    @Override
-    protected void onStart() {
-        super.onStart();
-
-        if( Build.VERSION.SDK_INT < Build.VERSION_CODES.M
-                || checkSelfPermission( Manifest.permission.ACCESS_COARSE_LOCATION ) == PackageManager.PERMISSION_GRANTED ) {
-            startDiscovery();
-        }
-    }
-
     private void startDiscovery() {
         //If the DiscoveryAgent is not already looking for robots, start discovery.
         if( !DualStackDiscoveryAgent.getInstance().isDiscovering() ) {
@@ -215,37 +227,6 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
                 Log.e("Sphero", "DiscoveryException: " + e.getMessage());
             }
         }
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        getMenuInflater().inflate(R.menu.menu_main, menu);
-        return true;
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        int id = item.getItemId();
-        if (id == R.id.action_settings) {
-            return true;
-        }
-        return super.onOptionsItemSelected(item);
-    }
-
-    @Override
-    protected void onStop() {
-        //If the DiscoveryAgent is in discovery mode, stop it.
-        if( DualStackDiscoveryAgent.getInstance().isDiscovering() ) {
-            DualStackDiscoveryAgent.getInstance().stopDiscovery();
-        }
-
-        //If a robot is connected to the device, disconnect it
-        if( mRobot != null ) {
-            mRobot.disconnect();
-            mRobot = null;
-        }
-
-        super.onStop();
     }
 
     @Override
