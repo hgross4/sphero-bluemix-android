@@ -67,7 +67,7 @@ public class MainActivity extends ActionBarActivity implements MqttCallback, Rob
         String clientId     = "d:nayvxj:and:nexus";
 
         // password: replace with your own password
-        String password     = "zkQhY1NUe*d9&b6)5C";
+        String password     = "?A2!xNGyckzJfS6Hjp";
 
         // Connect to IBM Bluemix
         MemoryPersistence persistence = new MemoryPersistence();
